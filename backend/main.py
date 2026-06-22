@@ -36,15 +36,42 @@ app.add_middleware(
 )
 
 
+class PastJob(BaseModel):
+    company: Optional[str] = Field(None, description="Company name")
+    title: Optional[str] = Field(None, description="Job title or role at that company")
+
 class CandidateProfile(BaseModel):
+    # Basic Info
     first_name: Optional[str] = Field(None, description="Candidate's legal first name")
     last_name: Optional[str] = Field(None, description="Candidate's legal last name")
     email: Optional[str] = Field(None, description="Primary email address")
     phone: Optional[str] = Field(None, description="Phone number including country code if available")
+
+    # Links
     linkedin: Optional[str] = Field(None, description="Full LinkedIn profile URL")
     github: Optional[str] = Field(None, description="Full GitHub profile URL")
+    personal_website: Optional[str] = Field(None, description="Personal website or portfolio URL")
+
+    # Current Employment
     current_company: Optional[str] = Field(None, description="Current employer, if any. Return None if a student.")
     current_title: Optional[str] = Field(None, description="Current job title. Return None if a student.")
+
+    # Past Employment (up to 2)
+    past_jobs: Optional[list[PastJob]] = Field(None, description="List of up to 2 most recent past jobs (not including the current one). Each with company and title.")
+
+    # Education
+    school: Optional[str] = Field(None, description="Most recent university or college name")
+    degree: Optional[str] = Field(None, description="Degree type, e.g. Bachelor's, Master's, PhD")
+    discipline: Optional[str] = Field(None, description="Field of study or major, e.g. Computer Science")
+    edu_start_year: Optional[str] = Field(None, description="Education start year, e.g. 2023")
+    edu_end_year: Optional[str] = Field(None, description="Education end year or expected graduation year, e.g. 2027")
+
+    # Skills & Projects
+    skills: Optional[list[str]] = Field(None, description="List of technical skills, programming languages, frameworks, and engineering domains mentioned in the resume")
+    projects_summary: Optional[str] = Field(None, description="A brief summary of 2-3 notable projects from the resume. Keep each project to one sentence.")
+
+    # Other
+    visa_sponsorship: Optional[str] = Field(None, description="Whether the candidate requires visa sponsorship. Only extract if explicitly stated. Return None if not mentioned.")
 
 llm = ChatGroq(
     model="llama-3.3-70b-versatile",
@@ -80,6 +107,16 @@ async def initiate_run(resume: UploadFile = File(...), url:str = Form(...)):
         print(f"Received request for URL:{url}")
 
         pdf_content = await resume.read()
+        
+        # Use the OS's secure temporary directory for deployment safety
+        import tempfile, uuid
+        temp_dir = tempfile.gettempdir()
+        # Create a unique filename so concurrent users don't overwrite each other's resumes
+        resume_path = os.path.join(temp_dir, f"resume_{uuid.uuid4().hex[:8]}.pdf")
+        
+        with open(resume_path, "wb") as f:
+            f.write(pdf_content)
+            
         doc = pymupdf.open(stream=pdf_content, filetype='pdf')
         
         md_text = pymupdf4llm.to_markdown(doc)
@@ -98,16 +135,17 @@ async def initiate_run(resume: UploadFile = File(...), url:str = Form(...)):
 
         # await browser_manager.start(url)
         print("Extraction complete")
-        print(parsed_profile)
+        # print("parsed data:", parsed_profile)
         
         initial_state = {
             "profile": parsed_profile.model_dump(),
             "execution_queue": form_fields,
             "current_index": 0,
-            "status": "planning"
+            "status": "planning",
+            "resume_path": resume_path
         }
-        
-        new_state = agent_graph.invoke(initial_state, CONFIG)
+        # print("extracted_data:", form_fields)
+        new_state = await agent_graph.ainvoke(initial_state, CONFIG)
         return {
             'status': 'success',
             'execution_queue': new_state['execution_queue'],
@@ -148,7 +186,10 @@ async def event_generator():
             }
                 
             yield f"data: {json.dumps(payload)}\n\n"
-            await asyncio.sleep(1.5)
+            if updated_field.get('status') == 'completed':
+                await asyncio.sleep(1.5) # Pause to let the user see the typing
+            else:
+                await asyncio.sleep(0.5)
 
     except asyncio.CancelledError:
         print("Client disconnected (AbortSignal). Halting the graph safely.")
@@ -161,27 +202,65 @@ async def event_generator():
 async def stream_execution():
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+from typing import List
+
 class ChatInstruction(BaseModel):
     message: str
 
+class FieldUpdate(BaseModel):
+    id: str = Field(description="The exact ID of the field to update (e.g., 'element_3')")
+    new_value: str = Field(description="The new value to set for this field. For checkboxes, use 'check' or 'uncheck'")
+
+class ChatInstructionUpdates(BaseModel):
+    updates: List[FieldUpdate] = Field(description="List of fields to update based on the instruction")
+
+chat_parser = PydanticOutputParser(pydantic_object=ChatInstructionUpdates)
+
+chat_prompt = PromptTemplate.from_template(
+    """You are an assistant helping to update form fields based on a user's natural language instruction.
+    
+    Current Form Fields:
+    {queue}
+    
+    User Instruction: "{instruction}"
+    
+    Figure out which fields the user wants to update, and what their new values should be.
+    Match the user's intent to the correct field 'id' from the list above.
+    If the instruction tells you to skip or leave a field blank, set its new value to an empty string "".
+    
+    {format_instructions}
+    """
+)
+chat_chain = chat_prompt.partial(format_instructions=chat_parser.get_format_instructions()) | llm | chat_parser
+
 @app.post("/api/chat-instruction")
 async def handle_chat(instruction: ChatInstruction):
-    print(f"Chat Instruction: {instruction.message}")
+    print(f"Chat Instruction received: {instruction.message}")
     
     current_state = agent_graph.get_state(CONFIG).values
     queue = current_state.get("execution_queue", [])
     
-    # NLP Matcher (Update to LLM later)
-    if "email" in instruction.message.lower():
+    # Format queue context to save tokens (we only need id, label, and current value)
+    queue_context = json.dumps([{"id": f["id"], "label": f["label"], "current_value": f["value"]} for f in queue])
+    
+    try:
+        result = await chat_chain.ainvoke({
+            "queue": queue_context,
+            "instruction": instruction.message
+        })
+        
+        # Apply updates back to the queue
+        updates_map = {u.id: u.new_value for u in result.updates}
         for field in queue:
-            if field["type"] == "email" or "email" in field["label"].lower():
-                new_email = instruction.message.split("to")[-1].strip()
-                field["value"] = new_email
-                field["status"] = "dirty" 
-                break
+            if field["id"] in updates_map:
+                field["value"] = updates_map[field["id"]]
+                field["status"] = "dirty"  # Mark as dirty so frontend/planner knows it was overridden
+                print(f" Chat updated field [{field['label']}] to '{field['value']}'")
                 
-    current_state["execution_queue"] = queue
-    agent_graph.update_state(CONFIG, current_state)
+        current_state["execution_queue"] = queue
+        agent_graph.update_state(CONFIG, current_state)
+    except Exception as e:
+        print(f" Failed to process chat instruction with LLM: {e}")
     
     return {"status": "success"}
 

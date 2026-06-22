@@ -9,10 +9,10 @@ class BrowserManager:
 
     async def start(self, url: str):
         if not self.browser:
-            print("🌐 Booting Persistent Browser...")
+            print("Booting Persistent Browser...")
             self.playwright = await async_playwright().start()
             self.browser = await self.playwright.chromium.launch(headless=True)
-            self.page = await self.browser.new_page()
+            self.page = await self.browser.new_page(viewport={'width': 1280, 'height': 720})
             await self.page.goto(url, wait_until="networkidle")
 
     async def extract_form_fields(self) -> List[Dict[str, Any]]:
@@ -50,6 +50,18 @@ class BrowserManager:
                                 el.getAttribute('placeholder') || 
                                 el.getAttribute('name') || 
                                 'Unlabeled Field';
+                }
+
+                // File inputs often have hidden or detached labels (like Greenhouse's Resume/CV field)
+                if (type === 'file' && (!labelText || labelText === 'Unlabeled Field')) {
+                    const container = el.closest('.field, .application-field, div[class*="field"], div[class*="container"]');
+                    if (container) {
+                        const lbl = container.querySelector('label, h3, h4, .text');
+                        if (lbl) labelText = lbl.innerText.trim();
+                    }
+                    if (!labelText || labelText === 'Unlabeled Field') {
+                        labelText = 'Resume/CV Upload';
+                    }
                 }
 
                 labelText = labelText.replace(/\\s+/g, ' ').replace(/\\*$/, '').trim();
