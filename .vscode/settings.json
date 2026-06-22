@@ -1,0 +1,8 @@
+{
+  "python.defaultInterpreterPath": "c:\\Users\\navee\\Documents\\agent-p\\backend\\venv\\Scripts\\python.exe",
+  "python.pythonPath": "c:\\Users\\navee\\Documents\\agent-p\\backend\\venv\\Scripts\\python.exe",
+  "python.analysis.extraPaths": [
+    "c:\\Users\\navee\\Documents\\agent-p\\backend\\venv\\Lib\\site-packages",
+    "c:\\Users\\navee\\Documents\\agent-p\\backend"
+  ]
+}
