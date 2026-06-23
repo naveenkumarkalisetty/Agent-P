@@ -12,7 +12,7 @@ class BrowserManager:
             print("Booting Persistent Browser...")
             self.playwright = await async_playwright().start()
             self.browser = await self.playwright.chromium.launch(headless=True)
-            self.page = await self.browser.new_page(viewport={'width': 1280, 'height': 720})
+            self.page = await self.browser.new_page(viewport={'width': 1024, 'height': 768})
             await self.page.goto(url, wait_until="networkidle")
 
     async def extract_form_fields(self) -> List[Dict[str, Any]]:
@@ -81,6 +81,26 @@ class BrowserManager:
                 else if (type === 'file') tagType = 'file';
                 else if (type === 'checkbox') tagType = 'checkbox';
                 else if (type === 'radio') tagType = 'radio';
+                
+                // Detect combobox/autocomplete inputs that behave like selects
+                if (tagType === 'text') {
+                    const hasAriaCombobox = 
+                        el.getAttribute('role') === 'combobox' ||
+                        el.getAttribute('aria-autocomplete') ||
+                        el.getAttribute('aria-haspopup') === 'listbox' ||
+                        el.getAttribute('list');
+                    
+                    // Check parent containers for autocomplete/select widget wrappers
+                    const wrapper = el.closest('[class*="autocomplete"], [class*="select"], [class*="combobox"], [class*="dropdown"], [data-autocomplete]');
+                    
+                    // Check if there's a hidden <select> nearby in the same field container
+                    const fieldContainer = el.closest('.field, .application-field, [class*="field"]');
+                    const hiddenSelect = fieldContainer ? fieldContainer.querySelector('select') : null;
+                    
+                    if (hasAriaCombobox || wrapper || hiddenSelect) {
+                        tagType = 'combobox';
+                    }
+                }
 
                 fieldList.push({
                     id: `element_${index}`,

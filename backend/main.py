@@ -111,6 +111,7 @@ async def initiate_run(resume: UploadFile = File(...), url:str = Form(...)):
         # Use the OS's secure temporary directory for deployment safety
         import tempfile, uuid
         temp_dir = tempfile.gettempdir()
+        
         # Create a unique filename so concurrent users don't overwrite each other's resumes
         resume_path = os.path.join(temp_dir, f"resume_{uuid.uuid4().hex[:8]}.pdf")
         
@@ -167,35 +168,35 @@ async def event_generator():
                 yield f"data: {json.dumps({'type': 'EXECUTION_COMPLETE'})}\n\n"
                 break
 
-            current_state['status'] = "running"
-            agent_graph.update_state(CONFIG, current_state)
+            agent_graph.update_state(CONFIG, {"status": "running"})
                 
             new_state = await agent_graph.ainvoke(None, CONFIG)
                 
-            current_index = new_state['current_index']
-            updated_field = new_state['execution_queue'][current_index - 1]
+            last_index = new_state.get('last_updated_index', -1)
+            queue = new_state.get('execution_queue', [])
+            
+            updated_field = None
+            if last_index >= 0 and last_index < len(queue):
+                updated_field = queue[last_index]
+                # If it's a dirty field being fixed, use its actual index for the frontend
+                payload = {
+                    "type": "FIELD_UPDATED",
+                    "field": updated_field,
+                    "currentIndex": last_index + 1,
+                    "liveImage": await browser_manager.get_screenshot_b64(),
+                    "was_modified": updated_field.get('status') == 'completed' and 'current_index' not in new_state # Heuristic or we can just let frontend handle text
+                }
                 
-            b64_image = await browser_manager.get_screenshot_b64()
-
-            payload = {
-                "type": "FIELD_UPDATED",
-                "field": updated_field,
-                "currentIndex": current_index,
-                "isProcessing": True,
-                "liveImage": b64_image  # Sending the visual frame!
-            }
+                yield f"data: {json.dumps(payload)}\n\n"
                 
-            yield f"data: {json.dumps(payload)}\n\n"
-            if updated_field.get('status') == 'completed':
-                await asyncio.sleep(1.5) # Pause to let the user see the typing
+            if updated_field and updated_field.get('status') == 'completed':
+                await asyncio.sleep(0.7) # Pause to let the user see the typing
             else:
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.2)
 
     except asyncio.CancelledError:
         print("Client disconnected (AbortSignal). Halting the graph safely.")
-        current_state = agent_graph.get_state(CONFIG).values
-        current_state["status"] = "paused"
-        agent_graph.update_state(CONFIG, current_state)
+        agent_graph.update_state(CONFIG, {"status": "paused"})
         raise
 
 @app.get('/api/stream-execution')
@@ -209,7 +210,7 @@ class ChatInstruction(BaseModel):
 
 class FieldUpdate(BaseModel):
     id: str = Field(description="The exact ID of the field to update (e.g., 'element_3')")
-    new_value: str = Field(description="The new value to set for this field. For checkboxes, use 'check' or 'uncheck'")
+    new_value: str = Field(description="The new value to set for this field. For checkboxes, use 'check' or 'uncheck'. To skip/clear, use empty string.")
 
 class ChatInstructionUpdates(BaseModel):
     updates: List[FieldUpdate] = Field(description="List of fields to update based on the instruction")
@@ -217,16 +218,23 @@ class ChatInstructionUpdates(BaseModel):
 chat_parser = PydanticOutputParser(pydantic_object=ChatInstructionUpdates)
 
 chat_prompt = PromptTemplate.from_template(
-    """You are an assistant helping to update form fields based on a user's natural language instruction.
+    """You are an intelligent assistant helping to update form fields based on a user's natural language instruction.
     
     Current Form Fields:
     {queue}
     
     User Instruction: "{instruction}"
     
-    Figure out which fields the user wants to update, and what their new values should be.
-    Match the user's intent to the correct field 'id' from the list above.
-    If the instruction tells you to skip or leave a field blank, set its new value to an empty string "".
+    Analyze the user's intent and determine if any form fields need to be updated.
+    
+    RULES:
+    1. If the user tells you to change a field's value, return the exact field 'id' and the 'new_value'.
+    2. If the user tells you to skip, clear, or leave a field blank, set the 'new_value' to "".
+    3. If the user tells you to "fill this field again", "retry", or click a field using the value you already have, return the field 'id' and set the 'new_value' to its CURRENT value from the list above.
+    4. If the user just says "continue", "my bad", "go ahead", or indicates that NO changes are needed, you MUST return an empty array for updates: {{"updates": []}}.
+    
+    IMPORTANT: You MUST return the result in this EXACT JSON format, wrapped in the "updates" array:
+    {{"updates": [{{"id": "element_X", "new_value": "some value"}}]}}
     
     {format_instructions}
     """
@@ -251,18 +259,20 @@ async def handle_chat(instruction: ChatInstruction):
         
         # Apply updates back to the queue
         updates_map = {u.id: u.new_value for u in result.updates}
+        updated_fields = []
         for field in queue:
             if field["id"] in updates_map:
                 field["value"] = updates_map[field["id"]]
-                field["status"] = "dirty"  # Mark as dirty so frontend/planner knows it was overridden
-                print(f" Chat updated field [{field['label']}] to '{field['value']}'")
+                field["status"] = "dirty"
+                updated_fields.append({"label": field["label"], "value": field["value"]})
+                print(f"Chat updated field [{field['label']}] to '{field['value']}'")
                 
-        current_state["execution_queue"] = queue
-        agent_graph.update_state(CONFIG, current_state)
+        agent_graph.update_state(CONFIG, {"execution_queue": queue})
+        return {"status": "success", "updated_fields": updated_fields}
     except Exception as e:
-        print(f" Failed to process chat instruction with LLM: {e}")
+        print(f"Failed to process chat instruction: {e}")
     
-    return {"status": "success"}
+    return {"status": "success", "updated_fields": []}
 
 if __name__ == "__main__":
     import uvicorn

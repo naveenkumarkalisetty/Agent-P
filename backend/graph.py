@@ -16,6 +16,7 @@ class AgentState(TypedDict):
     profile: Dict[str, Any] # resume fields
     execution_queue: List[Dict[str, Any]] # form fields from playwright
     current_index: int
+    last_updated_index: int
     status: Literal["planning", "running", "paused", "completed"]
     resume_path: str
 
@@ -238,8 +239,8 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
                 except Exception as e:
                     print(f"Playwright correction failed: {e}")
             
-            queue[i]['status'] = 'completed'
-            return { 'execution_queue': queue }
+            queue[i]['status'] = 'completed' if field['value'] else 'ignored'
+            return { 'execution_queue': queue, 'last_updated_index': i }
     
     if idx < len(queue):
         current_field = queue[idx]
@@ -311,7 +312,59 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
                             await locator.set_input_files(state['resume_path'], timeout=3000)
                             print(f"Uploaded resume to [{current_field['label']}]")
                     else:
-                        await locator.fill(current_field['value'], timeout=2000)
+                        # Check if this is a known autocomplete field by ID pattern
+                        sel_lower = current_field['selector'].lower()
+                        is_likely_combobox = any(
+                            kw in sel_lower for kw in ['school', 'degree', 'discipline', 'location', 'country']
+                        )
+                        
+                        if is_likely_combobox:
+                            # Use the full combobox handler for known autocomplete fields
+                            print(f"  Detected likely combobox by ID: {current_field['selector']}")
+                            await handle_combobox_select(
+                                browser_manager.page,
+                                current_field['selector'],
+                                current_field['value'],
+                                safe_selector
+                            )
+                        else:
+                            # Type character-by-character to trigger any autocomplete
+                            await locator.click(timeout=2000)
+                            await locator.fill('', timeout=2000)
+                            await locator.press_sequentially(current_field['value'], delay=60)
+                            
+                            # Poll for dropdown options (up to 3 attempts × 500ms = 1.5s)
+                            dropdown_clicked = False
+                            for _attempt in range(3):
+                                await asyncio.sleep(0.5)
+                                dropdown_clicked = await browser_manager.page.evaluate("""
+                                    (() => {
+                                        const optionSelectors = [
+                                            'li[role="option"]',
+                                            'ul[role="listbox"] li',
+                                            '.select2-results li',
+                                            '.autocomplete-dropdown li',
+                                            '[class*="dropdown"] li:not(nav li)',
+                                            '[class*="suggestion"]',
+                                            '[class*="option"]:not(select option)'
+                                        ];
+                                        for (const sel of optionSelectors) {
+                                            const opts = [...document.querySelectorAll(sel)]
+                                                .filter(el => el.offsetParent !== null);
+                                            if (opts.length > 0) {
+                                                opts[0].scrollIntoView({ block: 'nearest' });
+                                                opts[0].click();
+                                                return true;
+                                            }
+                                        }
+                                        return false;
+                                    })()
+                                """)
+                                if dropdown_clicked:
+                                    break
+                            
+                            if dropdown_clicked:
+                                print(f"  Auto-selected dropdown option for [{current_field['label']}]")
                 except Exception as e:
                     print(f"Playwright execution failed for {current_field['label']}: {e}")
                     
@@ -339,19 +392,16 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
             queue[idx]['status'] = 'ignored'
         return {
             'execution_queue': queue,
-            'current_index': idx + 1
+            'current_index': idx + 1,
+            'last_updated_index': idx
         }
         
     return { 'status': 'completed'}
 
 def router_logic(state: AgentState) -> str:
     """
-    Decides whether to keep looping, pause for human input, or finish
+    Decides whether to keep looping or finish
     """
-    
-    if state['status'] == 'paused':
-        return "pause_interrupt"
-    
     if state['status'] == 'completed' or state['current_index'] >= len(state['execution_queue']):
         return "end"
     
@@ -370,7 +420,6 @@ graph.add_conditional_edges(
     router_logic,
     {
         "continue": "executor",
-        "pause_interrupt": END,
         "end": END
     }
 )
