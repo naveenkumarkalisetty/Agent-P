@@ -89,8 +89,8 @@ It features a built-in "Human-in-the-Loop" architecture: you can pause execution
 1. **CAPTCHAs:** The agent cannot natively bypass CAPTCHA or reCAPTCHA challenges. If it hits one, the user must currently intervene manually if the browser is exposed, or the automation will halt.
 2. **Highly Custom Dropdowns:** While I've implemented aggressive logic to handle custom `<div>`-based comboboxes, heavily obfuscated React/Vue dropdowns that do not use standard accessibility tags might occasionally be missed or fail to open.
 3. **Multi-Page Applications:** Currently, the state loop is optimized for long single-page forms. Automatic complex multi-page navigation (clicking "Next", mapping the new DOM, and continuing) is not yet supported. To work on this we may need to perform either 
- - (i) Parse entire multi-page forms fields then start mapping then agent will fill automatically
- - (ii) Parse one page at a time and need user to verify fields and click next to resume the automation, telling the agent to do the parsing, mapping again for that page
+ - Parse entire multi-page forms fields then start mapping then agent will fill automatically
+ - Parse one page at a time and need user to verify fields and click next to resume the automation, telling the agent to do the parsing, mapping again for that page
 
 ---
 
