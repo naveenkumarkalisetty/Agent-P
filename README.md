@@ -98,7 +98,7 @@ It features a built-in "Human-in-the-Loop" architecture: you can pause execution
 
 Check out the full flow of Agent-P in action, including form extraction, live streaming, and the human-in-the-loop pause/resume interaction!
 
-[**Watch the Walkthrough Video Here**](#) *https://youtu.be/ypJsCbdPdoI*
+[Watch the walkthrough video here](https://youtu.be/ypJsCbdPdoI)
 
 ---
 
