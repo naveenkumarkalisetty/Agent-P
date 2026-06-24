@@ -20,12 +20,21 @@ from langchain_core.runnables import RunnableConfig
 from graph import agent_graph
 import uuid, base64,json
 from browser import browser_manager
+from contextlib import asynccontextmanager
 load_dotenv()
 
 THREAD_ID = str(uuid.uuid4())
 CONFIG:RunnableConfig = { "configurable": {"thread_id": THREAD_ID}}
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Booting Hidden Browser")
+    await browser_manager.initialize()
+    yield
+
+    print("Closing Hidden browser")
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -96,6 +105,7 @@ extraction_prompt = PromptTemplate.from_template(
     """
 )
 extraction_chain = extraction_prompt.partial(format_instructions=parser.get_format_instructions()) | llm | parser
+
 
 @app.post("/api/initiate-run")
 async def initiate_run(resume: UploadFile = File(...), url:str = Form(...)):

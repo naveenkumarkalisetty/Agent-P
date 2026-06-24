@@ -7,12 +7,16 @@ class BrowserManager:
         self.browser: Optional[Browser] = None
         self.page: Optional[Page] = None
 
+    async def initialize(self):
+        self.playwright = await async_playwright().start()
+        self.browser = await self.playwright.chromium.launch(headless=True)
+        self.page = await self.browser.new_page(viewport={'width': 1024, 'height': 768})
     async def start(self, url: str):
         if not self.browser:
-            print("Booting Persistent Browser...")
-            self.playwright = await async_playwright().start()
-            self.browser = await self.playwright.chromium.launch(headless=True)
-            self.page = await self.browser.new_page(viewport={'width': 1024, 'height': 768})
+            if not self.playwright:
+                print("Booting Persistent Browser...")
+                await self.initialize()
+        if self.page:
             await self.page.goto(url, wait_until="networkidle")
 
     async def extract_form_fields(self) -> List[Dict[str, Any]]:
@@ -117,7 +121,7 @@ class BrowserManager:
             return fieldList;
         }
         """
-        print("🔍 Scanning DOM in persistent browser...")
+        print(" Scanning DOM in persistent browser...")
         extracted_fields = await self.page.evaluate(js_extraction_script)
         return extracted_fields
 

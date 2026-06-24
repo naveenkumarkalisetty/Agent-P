@@ -168,7 +168,8 @@ async def handle_combobox_select(page, selector: str, value: str, safe_selector:
                     
                     // Last resort: click the first visible option
                     if (options.length > 0) {{
-                        options[0].scrollIntoView({{ block: 'nearest' }});
+                        options[0].scrollIntoView({{ block: 'center' }});
+                        window.scrollBy(0, 150);
                         options[0].click();
                         return 'first';
                     }}
@@ -226,6 +227,7 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
                             }}
                             if(el) {{
                                 el.scrollIntoView({{ behavior: 'instant', block: 'center', inline: 'center' }});
+                                window.scrollBy(0, 150);
                                 el.style.border = '3px solid #10b981';
                                 el.style.boxShadow = '0 0 15px #10b981';
                                 el.style.transition = 'all 0.3s ease';
@@ -261,6 +263,7 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
                         }}
                         if(el) {{
                             el.scrollIntoView({{ behavior: 'instant', block: 'center', inline: 'center' }});
+                            window.scrollBy(0, 150);
                             el.style.border = '3px solid #3b82f6';
                             el.style.boxShadow = '0 0 15px #3b82f6';
                             el.style.transition = 'all 0.3s ease';
@@ -352,7 +355,8 @@ async def executor_node(state: AgentState) -> Dict[str, Any]:
                                             const opts = [...document.querySelectorAll(sel)]
                                                 .filter(el => el.offsetParent !== null);
                                             if (opts.length > 0) {
-                                                opts[0].scrollIntoView({ block: 'nearest' });
+                                                opts[0].scrollIntoView({ block: 'center' });
+                                                window.scrollBy(0, 150);
                                                 opts[0].click();
                                                 return true;
                                             }

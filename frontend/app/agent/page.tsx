@@ -209,7 +209,14 @@ function PilotContent() {
   const completedFields = agentState.executionQueue?.filter(f => f.status === 'completed')?.length || 0;
   const progressPercentage = totalFields > 0 ? Math.round((completedFields / totalFields) * 100) : 0;
   return (
-    <div className="h-screen w-full flex gap-4 p-4 bg-zinc-100 dark:bg-zinc-950 overflow-hidden transition-colors duration-300">
+    <div className="
+      h-screen w-full flex gap-5 p-5
+      bg-[radial-gradient(circle_at_top_left,#6366f122,transparent_35%),radial-gradient(circle_at_bottom_right,#8b5cf622,transparent_40%),#f8fafc]
+      dark:bg-[radial-gradient(circle_at_top_left,#4f46e522,transparent_35%),radial-gradient(circle_at_bottom_right,#7c3aed22,transparent_40%),#020617]
+      overflow-hidden
+      transition-all duration-500
+      "
+    >
 
       {/* LEFT PANE */}
       <div className="w-[35%]">
@@ -217,7 +224,7 @@ function PilotContent() {
           className="
             relative h-full overflow-hidden
             rounded-[32px]
-            border border-zinc-300 dark:border-zinc-800/80
+            border-2 border-zinc-400 dark:border-zinc-800/80
             bg-white dark:bg-zinc-900
             backdrop-blur-2xl
             shadow-xl shadow-zinc-300/50 dark:shadow-2xl dark:shadow-black/40
@@ -276,7 +283,7 @@ function PilotContent() {
               <div className="w-full max-w-md mt-10 space-y-4">
 
                 <div
-                  className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 p-4"
+                  className="rounded-2xl border-2 border-zinc-300 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 p-4"
                 >
                   <label className="block text-xs text-zinc-600 dark:text-zinc-400 mb-2 font-medium">
                     Website URL
@@ -299,7 +306,7 @@ function PilotContent() {
                 <div
                   className="
                     rounded-2xl
-                    border border-zinc-200 dark:border-zinc-800
+                    border-2 border-zinc-300 dark:border-zinc-800
                     bg-zinc-50 dark:bg-zinc-800/50
                     p-4
                   "
@@ -381,10 +388,10 @@ function PilotContent() {
                   className="
                     flex items-center gap-3
                     rounded-2xl
-                    border border-zinc-200 dark:border-zinc-800
+                    border-2 border-zinc-300 dark:border-zinc-800
                     bg-zinc-50 dark:bg-zinc-800/50
                     px-4 py-3
-                    focus-within:border-zinc-400 dark:focus-within:border-zinc-600 transition-colors
+                    focus-within:border-zinc-500 dark:focus-within:border-zinc-600 transition-colors
                     shadow-sm
                   "
                 >
@@ -444,7 +451,7 @@ function PilotContent() {
           className="
             relative h-full overflow-hidden
             rounded-[32px]
-            border border-zinc-300 dark:border-zinc-800/80
+            border-2 border-zinc-400 dark:border-zinc-800/80
             bg-white dark:bg-zinc-900
             shadow-xl shadow-zinc-300/50 dark:shadow-2xl dark:shadow-black/40
             flex flex-col
@@ -463,7 +470,7 @@ function PilotContent() {
                 rounded-2xl
                 p-4
                 bg-zinc-50 dark:bg-zinc-800
-                border border-zinc-200 dark:border-zinc-700/50
+                border-2 border-zinc-300 dark:border-zinc-700/50
                 shadow-md shadow-zinc-200/50 dark:shadow-xl dark:shadow-black/20
               "
             >
@@ -512,7 +519,7 @@ function PilotContent() {
               className="
                 h-full
                 rounded-[28px]
-                border border-zinc-200 dark:border-zinc-800
+                border-2 border-zinc-300 dark:border-zinc-800
                 overflow-hidden
                 bg-zinc-50 dark:bg-zinc-950
                 shadow-inner
@@ -525,7 +532,7 @@ function PilotContent() {
                   h-14
                   px-5
                   flex items-center gap-3
-                  border-b border-zinc-300 dark:border-zinc-800
+                  border-b-2 border-zinc-400 dark:border-zinc-800
                   bg-gradient-to-r from-zinc-100 to-zinc-300 dark:from-zinc-800 dark:to-zinc-950
                   shrink-0
                 "
@@ -538,7 +545,7 @@ function PilotContent() {
                     flex-1
                     h-9
                     rounded-full
-                    border border-zinc-300 dark:border-zinc-700/50
+                    border-2 border-zinc-400 dark:border-zinc-700/50
                     bg-zinc-50 dark:bg-zinc-800
                     flex items-center px-4
                     text-sm text-zinc-600 dark:text-zinc-400
